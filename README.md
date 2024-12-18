@@ -66,10 +66,12 @@ head(result$hex_links)
 
 ## Use Cases
 
-The package is particularly useful for: - Visualizing administrative
-boundaries of varying sizes - Creating standardized choropleth maps -
-Comparing spatial patterns across regions with different polygon sizes -
-Generating tile-based representations of irregular spatial data
+The package is particularly useful for: 
+
+- Visualizing administrative boundaries of varying sizes 
+- Creating standardized choropleth maps 
+- Comparing spatial patterns across regions with different polygon sizes 
+- Generating tile-based representations of irregular spatial data
 
 ## Function Documentation
 
@@ -77,15 +79,18 @@ Generating tile-based representations of irregular spatial data
 
 Main function for creating hexagonal grid representations.
 
-**Arguments:** - `sf_object`: An sf object containing the polygons to be
-transformed - `hex_size`: Size of hexagonal cells in the same units as
-sf_object - `min_coverage`: Minimum proportion (0-1) of hex that must be
-covered - `id_col`: Name of column containing unique identifiers -
-`name_col`: Optional column name containing polygon names
+**Arguments:** 
 
-**Returns:** A list with two elements: - `hex_sp`: An sf object
-containing the hexagonal grid - `hex_links`: A data frame linking
-original polygon IDs to hex assignments
+- `sf_object`: An sf object containing the polygons to be transformed 
+- `hex_size`: Size of hexagonal cells in the same units as sf_object 
+- `min_coverage`: Minimum proportion (0-1) of hex that must be covered 
+- `id_col`: Name of column containing unique identifiers 
+- `name_col`: Optional column name containing polygon names
+
+**Returns:** A list with two elements: 
+
+- `hex_sp`: An sf object containing the hexagonal grid 
+- `hex_links`: A data frame linking original polygon IDs to hex assignments
 
 ## Citation
 
