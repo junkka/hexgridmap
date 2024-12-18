@@ -38,7 +38,7 @@ devtools::install_github("junkka/hexgridmap")
 Here's a basic example:
 
 ``` r
-library(hexgrid)
+library(hexgridmap)
 library(sf)
 library(ggplot2)
 
