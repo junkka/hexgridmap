@@ -1,0 +1,244 @@
+---
+title: "Creating Hexagonal Grid Representations of Irregular Polygons"
+author: "Johan Junkka"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Creating Hexagonal Grid Representations of Irregular Polygons}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## The Challenge: Visualizing Data with Uneven Spatial Units
+
+When working with administrative boundaries like parishes, municipalities, or census tracts, we often encounter a common problem: the spatial units vary drastically in size. In Sweden, for example, parishes can range from tiny urban units like Stockholm domkyrka to vast rural parishes like Jukkasjärvi. This size disparity creates challenges when visualizing data:
+
+1. Small units become nearly invisible on maps
+2. Large units dominate the visual space
+3. The actual geographical patterns can be hard to discern
+
+This vignette demonstrates how to transform such irregular spatial units into a more standardized hexagonal grid representation while maintaining spatial relationships.
+
+## The Solution: Hexagonal Grid Transformation
+
+Our approach converts irregular polygons into a hexagonal grid representation where:
+
+- Small polygons are combined into single hexagons
+- Large polygons can span multiple hexagons
+- Spatial relationships are preserved
+- The visualization becomes more standardized
+
+Let's walk through the development process.
+
+## Loading Required Libraries
+
+```{r libraries}
+library(sf)
+library(histmaps)
+library(tidyverse)
+```
+
+## Step 1: Creating the Base Hexagonal Grid
+
+First, we need to create a hexagonal grid that covers our study area. The size of the hexagons is a key parameter that affects the final representation:
+
+```{r hex-grid}
+# Set the hex size (in the same units as your projection)
+size <- 25000/1.2  # Approximately 20.8 km
+
+# Create base area from the county boundaries
+counties <- geom_sp %>% 
+  filter(start <= 1900, end >= 1900, type_id == "county") %>% 
+  summarise(1)
+
+# Create hex grid
+hex_grid <- st_make_grid(counties, 
+                        square = FALSE, 
+                        cellsize = size, 
+                        what = "polygons")
+
+# Plot to examine
+plot(st_geometry(hex_grid), main = "Initial Hex Grid")
+plot(st_geometry(counties), add = TRUE, border = "red")
+```
+
+## Step 2: Cleaning the Grid
+
+The initial grid includes many hexagons that only partially overlap with our study area. We want to keep only hexagons that have meaningful coverage:
+
+```{r clean-grid}
+# Get intersections
+hex_sf <- hex_grid[counties] %>%
+  st_as_sf() %>%
+  rownames_to_column(var = "id")
+
+base_area <- st_area(hex_sf$x[1]) %>% as.numeric()
+
+# Calculate coverage and filter
+res0 <- st_intersection(hex_sf, counties)
+hex_coverage <- res0 %>%
+  group_by(id) %>%
+  summarise(
+    n = n(),
+    area = sum(as.numeric(st_area(.)))
+  )
+
+# Keep hexes with >20% coverage
+valid_hexes <- hex_coverage %>%
+  filter(area > (base_area * 0.2))
+
+hex_clean <- hex_sf %>% 
+  filter(id %in% valid_hexes$id)
+
+plot(st_geometry(hex_clean), 
+     main = "Cleaned Hex Grid (>20% Coverage)",
+     col = "#ff000088")
+```
+
+## Step 3: Assigning Parishes to Hexagons
+
+The core challenge is determining how to assign parishes to hexagons. We identified several cases that needed different handling:
+
+1. One-to-one relationships: Parishes that fit within a single hex
+2. Many-to-one: Multiple small parishes in one hex
+3. One-to-many: Large parishes spanning multiple hexes
+4. Edge cases: Parishes with partial coverage
+
+Here's how we handle each case:
+
+```{r parish-assignment}
+# Get parish data for 1930
+parishes <- geom_sp %>% 
+  filter(type_id == "parish", start <= 1930, end >= 1930)
+
+# Calculate intersections
+intersections <- st_intersection(parishes, hex_clean) %>%
+  mutate(
+    area = as.numeric(st_area(.)),
+    full_coverage = area >= base_area
+  ) %>%
+  rownames_to_column() %>%
+  group_by(geom_id) %>%
+  mutate(
+    n_hexes = n(),
+    n_full = sum(full_coverage)
+  ) %>%
+  ungroup()
+
+# 1. Handle one-hex parishes
+one_hex <- intersections %>% 
+  filter(n_hexes == 1)
+
+# 2. Handle multi-hex parishes with no full coverage
+other_hex <- intersections %>% 
+  filter(n_hexes > 1)
+
+no_full_hex <- other_hex %>%
+  arrange(-area) %>%
+  group_by(geom_id) %>%
+  filter(max(full_coverage) != 1) %>%
+  slice(1) %>%
+  ungroup()
+
+# 3. Handle multi-hex parishes with full coverage
+full_hex <- other_hex %>%
+  group_by(id) %>%
+  filter(n() == 1) %>%
+  ungroup()
+```
+
+## Step 4: Handling Edge Cases
+
+For parishes that don't clearly fit into our main categories, we use area-based assignment:
+
+```{r edge-cases}
+# Find remaining cases
+other_hex2 <- other_hex %>%
+  filter(!id %in% unique(full_hex$id)) %>%
+  filter(!id %in% unique(no_full_hex$id)) %>%
+  filter(!id %in% unique(one_hex$id))
+
+# Assign based on largest area of intersection
+leftover_hex <- other_hex2 %>%
+  arrange(-area) %>%
+  group_by(id) %>%
+  slice(1) %>%
+  ungroup()
+
+# Combine all assignments
+hex_data <- bind_rows(one_hex, full_hex, no_full_hex, leftover_hex)
+```
+
+## Step 5: Creating the Final Output
+
+The final step is to create a clean data structure that links hexagons to their assigned parishes:
+
+```{r final-output}
+# Create linkage table
+hex_links <- hex_data %>% 
+  st_drop_geometry() %>%
+  select(geom_id, id)
+
+# Create hex summary
+hex_summary <- hex_data %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(
+    geom_ids = paste(unique(geom_id), collapse = "-"),
+    area_tot = sum(area)
+  ) %>%
+  mutate(
+    prop = area_tot/base_area
+  )
+
+# Final hex spatial object
+final_hex <- hex_clean %>%
+  left_join(hex_summary, by = "id")
+
+# Visualize final result
+ggplot(final_hex) +
+  geom_sf(aes(fill = prop)) +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  ggtitle("Final Hexagonal Grid with Coverage Proportions")
+```
+
+## Conclusions
+
+This approach provides several benefits:
+
+1. More standardized visualization units
+2. Better representation of both small and large parishes
+3. Maintained spatial relationships
+4. Flexible assignment rules based on coverage and area
+
+The method can be adapted for different spatial scales by adjusting:
+
+- Hex size
+- Minimum coverage threshold
+- Assignment rules for edge cases
+
+## Using the Package
+
+The entire process has been encapsulated in the `create_hex_map()` function:
+
+```{r package-usage, eval=FALSE}
+result <- create_hex_map(
+  sf_object = parishes,
+  hex_size = 25000,
+  min_coverage = 0.2,
+  id_col = "geom_id",
+  name_col = "name"
+)
+```
+
+This provides a reusable solution for similar spatial aggregation challenges.

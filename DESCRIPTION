@@ -1,0 +1,31 @@
+Package: hexgridmap
+Title: Transforms irregular spatial polygons into a hexagonal grid representation
+Version: 0.1.0
+Authors@R: 
+    person("Johan", "Junkka", , "johan.junkka@gmail.com", role = c("aut", "cre"))
+Description: Transforms irregular spatial polygons into a hexagonal grid representation,
+    useful for visualizing geographical patterns when dealing with polygons of vastly
+    different sizes. Small polygons are aggregated into single hexagons while large
+    polygons can span multiple hexagons. Particularly useful for visualizing data
+    where administrative or statistical areas vary greatly in size, such as parishes,
+    municipalities, or census tracts. The package maintains spatial relationships
+    while providing a more standardized visualization format.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    sf (>= 1.0.0),
+    dplyr (>= 1.1.0),
+    rlang (>= 1.1.0),
+    tibble,
+    stats
+Suggests:
+    ggplot2 (>= 3.4.0),
+    testthat (>= 3.0.0),
+    tidyverse,
+    histmaps,
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr
